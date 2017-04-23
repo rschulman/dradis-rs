@@ -1,0 +1,6 @@
+[package]
+name = "dradis"
+version = "0.1.0"
+authors = ["Ross Schulman <ross@rbs.io>"]
+
+[dependencies]
