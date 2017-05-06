@@ -47,7 +47,12 @@ struct priv_iw_quality {
     updated: uint8_t
 }
 
-struct priv_iw_freq {}
+struct priv_iw_freq {
+    m: int32_t,
+    e: int16_t,
+    i: uint8_t,
+    flags: uint8_t
+}
 
 #[repr(C)]
 struct  iw_range {
