@@ -3,6 +3,14 @@ extern crate libc;
 use std::net::{SocketAddrV4, SocketAddrV6};
 use libc::*;
 
+const IW_AUTH_WPA_VERSION_DISABLED: u8 = 0x00000001;
+const IW_AUTH_WPA_VERSION_WPA: u8 = 0x00000002;
+const IW_AUTH_WPA_VERSION_WPA2: u8 = 0x00000004;
+const IW_MAX_BITRATES: usize = 32;
+const IW_MAX_ENCODING_SIZES: usize = 8;
+const IW_MAX_FREQUENCIES: usize = 32;
+const IW_MAX_TXPOWER: usize = 8;
+
 pub enum WirelessMode {
     Auto, /* Let the driver decide */
     AdHoc, /* Single cell network */
@@ -170,7 +178,7 @@ pub struct WifiScan<'a> {
 }
 
 impl<'a> WifiScan<'a> {
-    pub fn new() -> WifiScan {
+    pub fn new() -> WifiScan<'a> {
         WifiScan { networks: Vec::new() }
     }
 
