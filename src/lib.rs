@@ -1,6 +1,7 @@
 extern crate libc;
 
 use std::net::{SocketAddrV4, SocketAddrV6};
+use std::ffi::CString;
 use libc::*;
 
 const IW_AUTH_WPA_VERSION_DISABLED: u8 = 0x00000001;
@@ -173,20 +174,64 @@ struct iw_range {
     bitrate_capa: uint32_t, /* Types of bitrates supported */
 }
 
+#[link(name="iwlib")]
+extern {
+    fn iw_socket_open() -> c_int;
+    fn iw_get_range_info(socket: c_int,
+                         interface: CString,
+                         range: &iw_range) -> c_int;
+    fn iw_scan(socket: c_int,
+               interface: CString,
+               version: c_int,
+               head: &wireless_scan_head) -> c_int;
+}
+
+
 pub struct WifiScan<'a> {
     networks: Vec<WirelessNetwork<'a>>,
 }
 
 impl<'a> WifiScan<'a> {
-    pub fn new() -> WifiScan<'a> {
-        WifiScan { networks: Vec::new() }
-    }
-
-    pub fn scan() {
+    pub fn scan(interface: String) -> Result<WifiScan<'a>, WifiScanError> {
         // Scan things here
+        unsafe { // TODO: Slim down unsafe blocks.
+            // First get an iw socket.
+            let sock = iw_socket_open();
+            let interface_name = CString::new(interface).unwrap(); // TODO: Make the interface name configurable.
+            let range: iw_range;
+            let head: wireless_scan_head;
+            if iw_get_range_info(sock, interface_name, &range) < 0 {
+                // We have to make this call in order to get the version of the library on the computer
+                Err("Got an error from the iw library")
+            }
+            if iw_scan(sock, interface_name, range.we_version_compiled, &head) <0 {
+                // This is the actual scan call that fills in the `head` struct with information about the visible networks.
+                Err("Got an error from the iw library")
+            }
+            let result = head.result;
+            let mut list = Vec::new();
+            while result != ptr::null {
+                // The scan results are a linked list of structs with a bunch of information about each network
+                // The type of encryption is encoded in a bitflag called `key_flags` which we check by doing
+                // a bitwise and against the known bitflags.
+                let answer = if result.b.key_flags & IW_AUTH_WPA_VERSION_DISABLED > 0 {
+                    "None".to_string()
+                } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA > 0 {
+                    "WPA".to_string()
+                } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA2 > 0 {
+                    "WPA2".to_string()
+                } ;
+                list.push(WirelessNetwork {
+                    SSID: result.b.essid.to_string(),
+                    encryption: answer, // TODO Figure out how to get encryption type from `result`
+                    strength: result.stats
+                });
+                result = result.next;
+            }
+        }
+        Ok( WifiScan { networks: list });
     }
 }
-
 
 #[cfg(test)]
 mod tests {
