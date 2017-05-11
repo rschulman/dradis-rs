@@ -52,6 +52,7 @@ pub struct WirelessNetwork<'a> {
     mode: Option<WirelessMode>,
 }
 
+#[repr(C)]
 struct priv_iw_quality {
     qual: uint8_t,
     level: uint8_t,
@@ -59,6 +60,7 @@ struct priv_iw_quality {
     updated: uint8_t,
 }
 
+#[repr(C)]
 struct priv_iw_freq {
     m: int32_t,
     e: int16_t,
