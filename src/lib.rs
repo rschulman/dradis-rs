@@ -60,12 +60,34 @@ struct priv_iw_quality {
     updated: uint8_t,
 }
 
+impl Default for priv_iw_quality {
+    fn default() -> priv_iw_quality {
+        priv_iw_quality {
+            qual: 0,
+            level: 0,
+            noise: 0,
+            updated: 0
+        }
+    }
+}
+
 #[repr(C)]
 struct priv_iw_freq {
     m: int32_t,
     e: int16_t,
     i: uint8_t,
     flags: uint8_t,
+}
+
+impl Default for priv_iw_freq {
+    fn default() -> priv_iw_freq {
+        priv_iw_freq {
+            m: 0,
+            e: 0,
+            i: 0,
+            flags: 0
+        }
+    }
 }
 
 #[repr(C)]
@@ -174,6 +196,59 @@ struct iw_range {
 
     /* More bitrate stuff */
     bitrate_capa: uint32_t, /* Types of bitrates supported */
+}
+
+impl Default for iw_range {
+    fn default() -> iw_range {
+        iw_range {
+            min_nwid: 0,
+            max_nwid: 0,
+            old_num_channels: 0,
+            old_num_frequency: 0,
+            event_capa: [0; ..6u],
+            sensitivity: 0,
+            max_qual: priv_iw_quality, /* Quality of the link */
+            avg_qual: priv_iw_quality, /* Quality of the link */
+            num_bitrates: 0, /* Number of entries in the list */
+            bitrate: [0; ..IW_MAX_BITRATES], /* list, in bps */
+            min_rts: 0, /* Minimal RTS threshold */
+            max_rts: 0, /* Maximal RTS threshold */
+            min_frag: 0, /* Minimal frag threshold */
+            max_frag: 0, /* Maximal frag threshold */
+            min_pmp: 0, /* Minimal PM period */
+            max_pmp: 0, /* Maximal PM period */
+            min_pmt: 0, /* Minimal PM timeout */
+            max_pmt: 0, /* Maximal PM timeout */
+            pmp_flags: 0, /* How to decode max/min PM period */
+            pmt_flags: 0, /* How to decode max/min PM timeout */
+            pm_capa: 0, /* What PM options are supported */
+            encoding_size: [0; ..IW_MAX_ENCODING_SIZES], /* Different token sizes */
+            num_encoding_sizes: 0, /* Number of entry in the list */
+            max_encoding_tokens: 0, /* Max number of tokens */
+            encoding_login_index: 0, /* token index for login token */
+            txpower_capa: 0, /* What options are supported */
+            num_txpower: 0, /* Number of entries in the list */
+            txpower: [0; ..IW_MAX_TXPOWER], /* list, in bps */
+            we_version_compiled: 0, /* Must be WIRELESS_EXT */
+            we_version_source: 0, /* Last update of source */
+            retry_capa: 0, /* What retry options are supported */
+            retry_flags: 0, /* How to decode max/min retry limit */
+            r_time_flags: 0, /* How to decode max/min retry life */
+            min_retry: 0, /* Minimal number of retries */
+            max_retry: 0, /* Maximal number of retries */
+            min_r_time: 0, /* Minimal retry lifetime */
+            max_r_time: 0, /* Maximal retry lifetime */
+            num_channels: 0, /* Number of channels [0, num - 1] */
+            num_frequency: 0, /* Number of entry in the list */
+            freq: [priv_iw_freq; ..IW_MAX_FREQUENCIES], /* list */
+            enc_capa: 0, /* IW_ENC_CAPA_* bit field */
+            min_pms: 0, /* Minimal PM saving */
+            max_pms: 0, /* Maximal PM saving */
+            pms_flags: 0, /* How to decode max/min PM saving */
+            modul_capa: 0, /* IW_MODUL_* bit field */
+            bitrate_capa: 0, /* Types of bitrates supported */
+        }
+    }
 }
 
 #[link(name="iwlib")]
