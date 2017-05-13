@@ -39,7 +39,8 @@ pub struct WirelessKey<'a> {
     flags: i32,
 }
 
-
+/// The WirelessNetwork struct holds details about a single network,
+/// including ssid, encryption type, bitrate, and signal strength.
 pub struct WirelessNetwork<'a> {
     ap_addr4: Option<SocketAddrV4>,
     ap_addr6: Option<SocketAddrV6>,
@@ -50,6 +51,7 @@ pub struct WirelessNetwork<'a> {
     key: Option<WirelessKey<'a>>,
     essid: Option<String>,
     mode: Option<WirelessMode>,
+    encryption: String
 }
 
 #[repr(C)]
@@ -207,8 +209,8 @@ impl Default for iw_range {
             old_num_frequency: 0,
             event_capa: [0; ..6u],
             sensitivity: 0,
-            max_qual: priv_iw_quality, /* Quality of the link */
-            avg_qual: priv_iw_quality, /* Quality of the link */
+            max_qual: Default::default(), /* Quality of the link */
+            avg_qual: Default::default(), /* Quality of the link */
             num_bitrates: 0, /* Number of entries in the list */
             bitrate: [0; ..IW_MAX_BITRATES], /* list, in bps */
             min_rts: 0, /* Minimal RTS threshold */
@@ -240,7 +242,7 @@ impl Default for iw_range {
             max_r_time: 0, /* Maximal retry lifetime */
             num_channels: 0, /* Number of channels [0, num - 1] */
             num_frequency: 0, /* Number of entry in the list */
-            freq: [priv_iw_freq; ..IW_MAX_FREQUENCIES], /* list */
+            freq: [Default::default(); ..IW_MAX_FREQUENCIES], /* list */
             enc_capa: 0, /* IW_ENC_CAPA_* bit field */
             min_pms: 0, /* Minimal PM saving */
             max_pms: 0, /* Maximal PM saving */
@@ -263,12 +265,30 @@ extern {
                head: &wireless_scan_head) -> c_int;
 }
 
-
+/// The WifiScan struct is the base object for the dradis library.
+/// This struct runs the scan when created and consists of an array of available networks.
 pub struct WifiScan<'a> {
     networks: Vec<WirelessNetwork<'a>>,
 }
 
 impl<'a> WifiScan<'a> {
+    /// Run a scan of the local wifi networks and return a Result with either
+    /// a WifiScan instance that contains a `Vec<WirelessNetwork>` called `networks`.
+    /// `interface` is a `String` containing the name of the wireless interface to be scanned.
+    ///
+    /// ```
+    /// use dradis::WifiScan;
+    ///
+    /// let local_networks = match WifiScan::scan("wlan0".to_string()) {
+    ///     Ok(scan) => scan,
+    ///     Err(err) => panic!("Failed to scan for wireless networks: {}", err)
+    /// }
+    ///
+    /// local_networks.networks.map(|network| {
+    ///                             println!("{}: Encryption: {}", network.essid,
+    ///                             network.encryption); });
+    /// ```
+    ///
     pub fn scan(interface: String) -> Result<WifiScan<'a>, WifiScanError> {
         // Scan things here
         unsafe { // TODO: Slim down unsafe blocks.
