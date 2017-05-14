@@ -297,48 +297,46 @@ impl<'a> WifiScan<'a> {
     pub fn scan(interface: String) -> Result<WifiScan<'a>, Error> {
         // Scan things here
         let mut list = Vec::new();
-        unsafe { // TODO: Slim down unsafe blocks.
-            // First get an iw socket.
-            let sock = iw_socket_open();
-            let interface_name = CString::new(interface).unwrap(); // TODO: Make the interface name configurable.
-            let range: iw_range;
-            let head: wireless_scan_head;
-            if iw_get_range_info(sock, interface_name, &range) < 0 {
-                // We have to make this call in order to get the version of the library on the computer
-                Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
-            }
-            if iw_scan(sock, interface_name, range.we_version_compiled as c_int, &head) <0 {
-                // This is the actual scan call that fills in the `head` struct with information about the visible networks.
-                Error::new(ErrorKind::InvalidData, "Got an error from the iw library")
-            }
-            let result = head.result;
-            while result != ptr::null {
-                // The scan results are a linked list of structs with a bunch of information about each network
-                // The type of encryption is encoded in a bitflag called `key_flags` which we check by doing
-                // a bitwise and against the known bitflags.
-                let answer = if result.b.key_flags & IW_AUTH_WPA_VERSION_DISABLED > 0 {
-                    "None".to_string()
-                } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA > 0 {
-                    "WPA".to_string()
-                } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA2 > 0 {
-                    "WPA2".to_string()
-                } else {
-                    "Error".to_string()
-                };
-                list.push(WirelessNetwork {
-                    ap_addr4: None,
-                    ap_addr6: None,
-                    maxbitrate: None,
-                    name: result.b.essid.to_string(),
-                    freq: None,
-                    key: None,
-                    mode: None,
-                    essid: result.b.essid.to_string(),
-                    encryption: answer, // TODO Figure out how to get encryption type from `result`
-                    stats: result.stats
-                });
-                result = result.next;
-            }
+        // First get an iw socket.
+        let sock = iw_socket_open();
+        let interface_name = CString::new(interface).unwrap(); // TODO: Make the interface name configurable.
+        let range: iw_range;
+        let head: wireless_scan_head;
+        if unsafe {iw_get_range_info(sock, interface_name, &range) < 0 } {
+            // We have to make this call in order to get the version of the library on the computer
+            Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
+        }
+        if unsafe {iw_scan(sock, interface_name, range.we_version_compiled as c_int, &head) <0 } {
+            // This is the actual scan call that fills in the `head` struct with information about the visible networks.
+            Error::new(ErrorKind::InvalidData, "Got an error from the iw library")
+        }
+        let result = head.result;
+        while result != ptr::null {
+            // The scan results are a linked list of structs with a bunch of information about each network
+            // The type of encryption is encoded in a bitflag called `key_flags` which we check by doing
+            // a bitwise and against the known bitflags.
+            let answer = if result.b.key_flags & IW_AUTH_WPA_VERSION_DISABLED > 0 {
+                "None".to_string()
+            } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA > 0 {
+                "WPA".to_string()
+            } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA2 > 0 {
+                "WPA2".to_string()
+            } else {
+                "Error".to_string()
+            };
+            list.push(WirelessNetwork {
+                ap_addr4: None,
+                ap_addr6: None,
+                maxbitrate: None,
+                name: result.b.essid.to_string(),
+                freq: None,
+                key: None,
+                mode: None,
+                essid: result.b.essid.to_string(),
+                encryption: answer, // TODO Figure out how to get encryption type from `result`
+                stats: result.stats
+            });
+            result = result.next;
         }
         Ok( WifiScan { networks: list })
     }
