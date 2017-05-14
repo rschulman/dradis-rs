@@ -2,6 +2,8 @@ extern crate libc;
 
 use std::net::{SocketAddrV4, SocketAddrV6};
 use std::ffi::CString;
+use std::ptr;
+use std::io::{Error, ErrorKind};
 use libc::*;
 
 const IW_AUTH_WPA_VERSION_DISABLED: u8 = 0x00000001;
@@ -54,6 +56,7 @@ pub struct WirelessNetwork<'a> {
     encryption: String
 }
 
+#[derive(Copy, Clone)]
 #[repr(C)]
 struct priv_iw_quality {
     qual: uint8_t,
@@ -73,6 +76,7 @@ impl Default for priv_iw_quality {
     }
 }
 
+#[derive(Copy, Clone)]
 #[repr(C)]
 struct priv_iw_freq {
     m: int32_t,
@@ -203,16 +207,17 @@ struct iw_range {
 impl Default for iw_range {
     fn default() -> iw_range {
         iw_range {
+            throughput: 0,
             min_nwid: 0,
             max_nwid: 0,
             old_num_channels: 0,
             old_num_frequency: 0,
-            event_capa: [0; ..6u],
+            event_capa: [0; 6u],
             sensitivity: 0,
             max_qual: Default::default(), /* Quality of the link */
             avg_qual: Default::default(), /* Quality of the link */
             num_bitrates: 0, /* Number of entries in the list */
-            bitrate: [0; ..IW_MAX_BITRATES], /* list, in bps */
+            bitrate: [0; IW_MAX_BITRATES], /* list, in bps */
             min_rts: 0, /* Minimal RTS threshold */
             max_rts: 0, /* Maximal RTS threshold */
             min_frag: 0, /* Minimal frag threshold */
@@ -224,13 +229,13 @@ impl Default for iw_range {
             pmp_flags: 0, /* How to decode max/min PM period */
             pmt_flags: 0, /* How to decode max/min PM timeout */
             pm_capa: 0, /* What PM options are supported */
-            encoding_size: [0; ..IW_MAX_ENCODING_SIZES], /* Different token sizes */
+            encoding_size: [0; IW_MAX_ENCODING_SIZES], /* Different token sizes */
             num_encoding_sizes: 0, /* Number of entry in the list */
             max_encoding_tokens: 0, /* Max number of tokens */
             encoding_login_index: 0, /* token index for login token */
             txpower_capa: 0, /* What options are supported */
             num_txpower: 0, /* Number of entries in the list */
-            txpower: [0; ..IW_MAX_TXPOWER], /* list, in bps */
+            txpower: [0; IW_MAX_TXPOWER], /* list, in bps */
             we_version_compiled: 0, /* Must be WIRELESS_EXT */
             we_version_source: 0, /* Last update of source */
             retry_capa: 0, /* What retry options are supported */
@@ -242,7 +247,7 @@ impl Default for iw_range {
             max_r_time: 0, /* Maximal retry lifetime */
             num_channels: 0, /* Number of channels [0, num - 1] */
             num_frequency: 0, /* Number of entry in the list */
-            freq: [Default::default(); ..IW_MAX_FREQUENCIES], /* list */
+            freq: [Default::default(); IW_MAX_FREQUENCIES], /* list */
             enc_capa: 0, /* IW_ENC_CAPA_* bit field */
             min_pms: 0, /* Minimal PM saving */
             max_pms: 0, /* Maximal PM saving */
@@ -289,8 +294,9 @@ impl<'a> WifiScan<'a> {
     ///                             network.encryption); });
     /// ```
     ///
-    pub fn scan(interface: String) -> Result<WifiScan<'a>, WifiScanError> {
+    pub fn scan(interface: String) -> Result<WifiScan<'a>, Error> {
         // Scan things here
+        let mut list = Vec::new();
         unsafe { // TODO: Slim down unsafe blocks.
             // First get an iw socket.
             let sock = iw_socket_open();
@@ -299,14 +305,13 @@ impl<'a> WifiScan<'a> {
             let head: wireless_scan_head;
             if iw_get_range_info(sock, interface_name, &range) < 0 {
                 // We have to make this call in order to get the version of the library on the computer
-                Err("Got an error from the iw library")
+                Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
             }
-            if iw_scan(sock, interface_name, range.we_version_compiled, &head) <0 {
+            if iw_scan(sock, interface_name, range.we_version_compiled as c_int, &head) <0 {
                 // This is the actual scan call that fills in the `head` struct with information about the visible networks.
-                Err("Got an error from the iw library")
+                Error::new(ErrorKind::InvalidData, "Got an error from the iw library")
             }
             let result = head.result;
-            let mut list = Vec::new();
             while result != ptr::null {
                 // The scan results are a linked list of structs with a bunch of information about each network
                 // The type of encryption is encoded in a bitflag called `key_flags` which we check by doing
@@ -317,16 +322,25 @@ impl<'a> WifiScan<'a> {
                     "WPA".to_string()
                 } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA2 > 0 {
                     "WPA2".to_string()
-                } ;
+                } else {
+                    "Error".to_string()
+                };
                 list.push(WirelessNetwork {
-                    SSID: result.b.essid.to_string(),
+                    ap_addr4: None,
+                    ap_addr6: None,
+                    maxbitrate: None,
+                    name: result.b.essid.to_string(),
+                    freq: None,
+                    key: None,
+                    mode: None,
+                    essid: result.b.essid.to_string(),
                     encryption: answer, // TODO Figure out how to get encryption type from `result`
-                    strength: result.stats
+                    stats: result.stats
                 });
                 result = result.next;
             }
         }
-        Ok( WifiScan { networks: list });
+        Ok( WifiScan { networks: list })
     }
 }
 
