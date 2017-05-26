@@ -2,6 +2,7 @@ extern crate libc;
 
 use std::net::{SocketAddrV4, SocketAddrV6};
 use std::ffi::CString;
+use std::os::raw::c_char;
 use std::ptr;
 use std::io::{Error, ErrorKind};
 use libc::*;
@@ -24,15 +25,25 @@ pub enum WirelessMode {
     Monitor, /* Passive monitor (listen only) */
 }
 
+#[derive(Copy, Clone)]
 pub struct IwQuality {
     quality: u8,
     level: u8,
     noise: u8,
 }
 
+#[derive(Copy, Clone)]
 pub struct IwStats {
     status: uint16_t,
     quality: IwQuality,
+}
+
+#[derive(Copy, Clone)]
+pub struct IwParam {
+    value: int32_t,      /* The value of the parameter itself */
+    fixed: uint8_t,      /* Hardware should not use auto select */
+    disabled: uint8_t,   /* Disable the feature */
+    flags: uint16_t      /* Various specifc flags (if any) */
 }
 
 pub struct WirelessKey<'a> {
@@ -54,6 +65,46 @@ pub struct WirelessNetwork<'a> {
     essid: Option<String>,
     mode: Option<WirelessMode>,
     encryption: String
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct WirelessScanHead {
+    result: *const WirelessScan,
+    retry: c_int
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct WirelessScan {
+    next: *const WirelessScan,
+    has_ap_addr: c_int,
+    ap_addr: sockaddr,
+    b: WirelessConfig,
+    stats: IwStats,
+    has_stats: c_int,
+    maxbitrate: IwParam,
+    has_maxbitrate: c_int
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct WirelessConfig {
+    name: [c_char; IFNAMSIZ + 1], /* Wireless/protocol name */
+    has_nwid: c_int,
+    nwid: IwParam,          /* Network ID */
+    has_freq: c_int,
+    freq: c_double,           /* Frequency/channel */
+    freq_flags: c_int,
+    has_key: c_int,
+    key: [c_char; IW_ENCODING_TOKEN_MAX], /* Encoding key used */
+    key_size: c_int,        /* Number of bytes */
+    key_flags: c_int,       /* Various flags */
+    has_essid: c_int,
+    essid_on: c_int,
+    essid: [c_char; IW_ESSID_MAX_SIZE + 1],   /* ESSID (extended network) */
+    has_mode: c_int,
+    mode: c_int         /* Operation mode */
 }
 
 #[derive(Copy, Clone)]
@@ -212,7 +263,7 @@ impl Default for iw_range {
             max_nwid: 0,
             old_num_channels: 0,
             old_num_frequency: 0,
-            event_capa: [0; 6u],
+            event_capa: [0; 6],
             sensitivity: 0,
             max_qual: Default::default(), /* Quality of the link */
             avg_qual: Default::default(), /* Quality of the link */
@@ -267,7 +318,7 @@ extern {
     fn iw_scan(socket: c_int,
                interface: CString,
                version: c_int,
-               head: &wireless_scan_head) -> c_int;
+               head: &WirelessScanHead) -> c_int;
 }
 
 /// The WifiScan struct is the base object for the dradis library.
@@ -301,14 +352,14 @@ impl<'a> WifiScan<'a> {
         let sock = iw_socket_open();
         let interface_name = CString::new(interface).unwrap(); // TODO: Make the interface name configurable.
         let range: iw_range;
-        let head: wireless_scan_head;
+        let head: WirelessScanHead;
         if unsafe {iw_get_range_info(sock, interface_name, &range) < 0 } {
             // We have to make this call in order to get the version of the library on the computer
-            Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
+            return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
         }
         if unsafe {iw_scan(sock, interface_name, range.we_version_compiled as c_int, &head) <0 } {
             // This is the actual scan call that fills in the `head` struct with information about the visible networks.
-            Error::new(ErrorKind::InvalidData, "Got an error from the iw library")
+            return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
         }
         let result = head.result;
         while result != ptr::null {
@@ -328,15 +379,15 @@ impl<'a> WifiScan<'a> {
                 ap_addr4: None,
                 ap_addr6: None,
                 maxbitrate: None,
-                name: result.b.essid.to_string(),
+                name: (*result).b.essid.to_string(),
                 freq: None,
                 key: None,
                 mode: None,
-                essid: result.b.essid.to_string(),
+                essid: (*result).b.essid.to_string(),
                 encryption: answer, // TODO Figure out how to get encryption type from `result`
-                stats: result.stats
+                stats: (*result).stats
             });
-            result = result.next;
+            result = (*result).next;
         }
         Ok( WifiScan { networks: list })
     }
