@@ -328,7 +328,6 @@ extern {
 
 /// The WifiScan struct is the base object for the dradis library.
 /// This struct runs the scan when created and consists of an array of available networks.
-#[derive(Iterator)]
 pub struct WifiScan<'a> {
     pub networks: Vec<WirelessNetwork<'a>>,
 }
