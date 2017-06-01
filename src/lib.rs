@@ -314,7 +314,7 @@ impl Default for iw_range {
     }
 }
 
-#[link(name="iwlib")]
+#[link(name="iw")]
 extern {
     fn iw_socket_open() -> c_int;
     fn iw_get_range_info(socket: c_int,
