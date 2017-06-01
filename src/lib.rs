@@ -354,7 +354,7 @@ impl<'a> WifiScan<'a> {
         // Scan things here
         let mut list = Vec::new();
         // First get an iw socket.
-        let sock = unsafe {iw_socket_open()};
+        let sock = unsafe {iw_sockets_open()};
         let interface_name = CString::new(interface).unwrap();
         let range: iw_range = Default::default();
         let head: WirelessScanHead;
