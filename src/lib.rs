@@ -60,16 +60,16 @@ pub struct WirelessKey<'a> {
 /// including ssid, encryption type, bitrate, and signal strength.
 #[repr(C)]
 pub struct WirelessNetwork<'a> {
-    ap_addr4: Option<SocketAddrV4>,
-    ap_addr6: Option<SocketAddrV6>,
-    stats: Option<IwStats>,
-    maxbitrate: Option<i32>,
-    name: String,
-    freq: Option<f64>,
-    key: Option<WirelessKey<'a>>,
-    essid: Option<String>,
-    mode: Option<WirelessMode>,
-    encryption: String
+    pub ap_addr4: Option<SocketAddrV4>,
+    pub ap_addr6: Option<SocketAddrV6>,
+    pub stats: Option<IwStats>,
+    pub maxbitrate: Option<i32>,
+    pub name: String,
+    pub freq: Option<f64>,
+    pub key: Option<WirelessKey<'a>>,
+    pub essid: Option<String>,
+    pub mode: Option<WirelessMode>,
+    pub encryption: String
 }
 
 #[derive(Copy, Clone)]
@@ -328,6 +328,7 @@ extern {
 
 /// The WifiScan struct is the base object for the dradis library.
 /// This struct runs the scan when created and consists of an array of available networks.
+#[derive(Iterator)]
 pub struct WifiScan<'a> {
     pub networks: Vec<WirelessNetwork<'a>>,
 }
