@@ -1,10 +1,11 @@
 extern crate libc;
 
 use std::net::{SocketAddrV4, SocketAddrV6};
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 use std::os::raw::c_char;
-use std::ptr;
+use std::mem;
 use std::io::{Error, ErrorKind};
+use std::str;
 use libc::*;
 
 const IW_AUTH_WPA_VERSION_DISABLED: u8 = 0x00000001;
@@ -14,6 +15,9 @@ const IW_MAX_BITRATES: usize = 32;
 const IW_MAX_ENCODING_SIZES: usize = 8;
 const IW_MAX_FREQUENCIES: usize = 32;
 const IW_MAX_TXPOWER: usize = 8;
+const IW_ESSID_MAX_SIZE: usize = 32;
+const IW_ENCODING_TOKEN_MAX: usize = 32;
+const IFNAMSIZ: usize = 16; // Defined in /include/uapi/linux/if.h but easier to just redefine here
 
 pub enum WirelessMode {
     Auto, /* Let the driver decide */
@@ -54,6 +58,7 @@ pub struct WirelessKey<'a> {
 
 /// The WirelessNetwork struct holds details about a single network,
 /// including ssid, encryption type, bitrate, and signal strength.
+#[repr(C)]
 pub struct WirelessNetwork<'a> {
     ap_addr4: Option<SocketAddrV4>,
     ap_addr6: Option<SocketAddrV6>,
@@ -102,7 +107,7 @@ struct WirelessConfig {
     key_flags: c_int,       /* Various flags */
     has_essid: c_int,
     essid_on: c_int,
-    essid: [c_char; IW_ESSID_MAX_SIZE + 1],   /* ESSID (extended network) */
+    essid: *const c_char, // size = IW_ESSID_MAX_SIZE + 1 ESSID (extended network)
     has_mode: c_int,
     mode: c_int         /* Operation mode */
 }
@@ -313,10 +318,10 @@ impl Default for iw_range {
 extern {
     fn iw_socket_open() -> c_int;
     fn iw_get_range_info(socket: c_int,
-                         interface: CString,
+                         interface: *const c_char,
                          range: &iw_range) -> c_int;
     fn iw_scan(socket: c_int,
-               interface: CString,
+               interface: *const c_char,
                version: c_int,
                head: &WirelessScanHead) -> c_int;
 }
@@ -328,7 +333,7 @@ pub struct WifiScan<'a> {
 }
 
 impl<'a> WifiScan<'a> {
-    /// Run a scan of the local wifi networks and return a Result with either
+    /// Run a scan of the local wifi networks and return a Result with an error or
     /// a WifiScan instance that contains a `Vec<WirelessNetwork>` called `networks`.
     /// `interface` is a `String` containing the name of the wireless interface to be scanned.
     ///
@@ -349,45 +354,52 @@ impl<'a> WifiScan<'a> {
         // Scan things here
         let mut list = Vec::new();
         // First get an iw socket.
-        let sock = iw_socket_open();
-        let interface_name = CString::new(interface).unwrap(); // TODO: Make the interface name configurable.
-        let range: iw_range;
+        let sock = unsafe {iw_socket_open()};
+        let interface_name = CString::new(interface).unwrap();
+        let range: iw_range = Default::default();
         let head: WirelessScanHead;
-        if unsafe {iw_get_range_info(sock, interface_name, &range) < 0 } {
+        unsafe { head = mem::uninitialized(); }
+        if unsafe {iw_get_range_info(sock, interface_name.as_ptr(), &range) < 0 } {
             // We have to make this call in order to get the version of the library on the computer
             return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
         }
-        if unsafe {iw_scan(sock, interface_name, range.we_version_compiled as c_int, &head) <0 } {
+        if unsafe {iw_scan(sock, interface_name.as_ptr(), range.we_version_compiled as c_int, &head) <0 } {
             // This is the actual scan call that fills in the `head` struct with information about the visible networks.
             return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
         }
-        let result = head.result;
-        while result != ptr::null {
+        let mut result = head.result;
+        while !result.is_null() {
             // The scan results are a linked list of structs with a bunch of information about each network
             // The type of encryption is encoded in a bitflag called `key_flags` which we check by doing
             // a bitwise and against the known bitflags.
-            let answer = if result.b.key_flags & IW_AUTH_WPA_VERSION_DISABLED > 0 {
-                "None".to_string()
-            } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA > 0 {
-                "WPA".to_string()
-            } else if result.b.key_flags & IW_AUTH_WPA_VERSION_WPA2 > 0 {
-                "WPA2".to_string()
-            } else {
-                "Error".to_string()
-            };
-            list.push(WirelessNetwork {
-                ap_addr4: None,
-                ap_addr6: None,
-                maxbitrate: None,
-                name: (*result).b.essid.to_string(),
-                freq: None,
-                key: None,
-                mode: None,
-                essid: (*result).b.essid.to_string(),
-                encryption: answer, // TODO Figure out how to get encryption type from `result`
-                stats: (*result).stats
-            });
-            result = (*result).next;
+            unsafe {
+                let answer = if (*result).b.key_flags & IW_AUTH_WPA_VERSION_DISABLED as c_int > 0 {
+                    "None".to_string()
+                } else if (*result).b.key_flags & IW_AUTH_WPA_VERSION_WPA as c_int > 0 {
+                    "WPA".to_string()
+                } else if (*result).b.key_flags & IW_AUTH_WPA_VERSION_WPA2 as c_int > 0 {
+                    "WPA2".to_string()
+                } else {
+                    "Error".to_string()
+                };
+                let ssid_string: &CStr = CStr::from_bytes_with_nul(::std::slice::from_raw_parts((*result).b.essid as *const u8, IW_ESSID_MAX_SIZE + 1 )).unwrap();
+                let buf: &[u8] = ssid_string.to_bytes();
+                let str_slice: &str = str::from_utf8(buf).unwrap();
+                let network_name: String = str_slice.to_owned();
+                list.push(WirelessNetwork {
+                    ap_addr4: None,
+                    ap_addr6: None,
+                    maxbitrate: None,
+                    name: network_name.clone(),
+                    freq: None,
+                    key: None,
+                    mode: None,
+                    essid: Some(network_name),
+                    encryption: answer,
+                    stats: Some((*result).stats)
+                });
+                result = (*result).next;
+            }
         }
         Ok( WifiScan { networks: list })
     }
