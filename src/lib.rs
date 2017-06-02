@@ -17,10 +17,9 @@ const IW_MAX_ENCODING_SIZES: usize = 8;
 const IW_MAX_FREQUENCIES: usize = 32;
 const IW_MAX_TXPOWER: usize = 8;
 const IW_ESSID_MAX_SIZE: usize = 32;
-const IW_ENCODING_TOKEN_MAX: usize = 32;
+const IW_ENCODING_TOKEN_MAX: usize = 64;
 const IFNAMSIZ: usize = 16; // Defined in /include/uapi/linux/if.h but easier to just redefine here
 
-#[derive(Debug)]
 pub enum WirelessMode {
     Auto, /* Let the driver decide */
     AdHoc, /* Single cell network */
@@ -31,7 +30,7 @@ pub enum WirelessMode {
     Monitor, /* Passive monitor (listen only) */
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct IwQuality {
     quality: u8,
@@ -39,23 +38,22 @@ pub struct IwQuality {
     noise: u8,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct IwStats {
     status: uint16_t,
     quality: IwQuality,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct IwParam {
-    value: int32_t,      /* The value of the parameter itself */
-    fixed: uint8_t,      /* Hardware should not use auto select */
-    disabled: uint8_t,   /* Disable the feature */
-    flags: uint16_t      /* Various specifc flags (if any) */
+    value: int32_t, /* The value of the parameter itself */
+    fixed: uint8_t, /* Hardware should not use auto select */
+    disabled: uint8_t, /* Disable the feature */
+    flags: uint16_t, /* Various specifc flags (if any) */
 }
 
-#[derive(Debug)]
 #[repr(C)]
 pub struct WirelessKey<'a> {
     key: &'a [u8],
@@ -65,7 +63,6 @@ pub struct WirelessKey<'a> {
 
 /// The WirelessNetwork struct holds details about a single network,
 /// including ssid, encryption type, bitrate, and signal strength.
-#[derive(Debug)]
 #[repr(C)]
 pub struct WirelessNetwork<'a> {
     pub ap_addr4: Option<SocketAddrV4>,
@@ -76,17 +73,15 @@ pub struct WirelessNetwork<'a> {
     pub key: Option<WirelessKey<'a>>,
     pub essid: Option<String>,
     pub mode: Option<WirelessMode>,
-    pub encryption: String
+    pub encryption: String,
 }
 
-#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 struct WirelessScanHead {
     result: *const WirelessScan,
-    retry: c_int
+    retry: c_int,
 }
 
-#[derive(Copy, Clone)]
 #[repr(C)]
 struct WirelessScan {
     next: *const WirelessScan,
@@ -96,44 +91,108 @@ struct WirelessScan {
     stats: IwStats,
     has_stats: c_int,
     maxbitrate: IwParam,
-    has_maxbitrate: c_int
+    has_maxbitrate: c_int,
 }
 
 impl fmt::Debug for WirelessScan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "WirelessScan {{next: {:?},
+        write!(f,
+               "WirelessScan {{next: {:?},
     has_ap_addr: {:?},
     ap_addr: sockaddr,
-    b: {:?},
+    b: \
+                {:?},
     stats: {:?},
     has_stats: {:?},
     maxbitrate: {:?},
-    has_maxbitrate: {:?}
- }}", self.next, self.has_ap_addr, self.b, self.stats, self.has_stats, self.maxbitrate, self.has_maxbitrate)
+    \
+                has_maxbitrate: {:?}
+ }}",
+               self.next,
+               self.has_ap_addr,
+               self.b,
+               self.stats,
+               self.has_stats,
+               self.maxbitrate,
+               self.has_maxbitrate)
     }
 }
 
-#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 struct WirelessConfig {
     name: [c_char; IFNAMSIZ + 1], /* Wireless/protocol name */
     has_nwid: c_int,
-    nwid: IwParam,          /* Network ID */
+    nwid: IwParam, /* Network ID */
     has_freq: c_int,
-    freq: c_double,           /* Frequency/channel */
+    freq: f64, /* Frequency/channel */
     freq_flags: c_int,
     has_key: c_int,
-    key: [c_char; IW_ENCODING_TOKEN_MAX], /* Encoding key used */
-    key_size: c_int,        /* Number of bytes */
-    key_flags: c_int,       /* Various flags */
+    key: [c_uchar; IW_ENCODING_TOKEN_MAX], /* Encoding key used */
+    key_size: c_int, /* Number of bytes */
+    key_flags: c_int, /* Various flags */
     has_essid: c_int,
     essid_on: c_int,
-    essid: [c_char; IW_ESSID_MAX_SIZE + 1], // ESSID (extended network)
+    essid: [c_char; IW_ESSID_MAX_SIZE + 2], // ESSID (extended network)
+    essid_len: c_int,
     has_mode: c_int,
-    mode: c_int         /* Operation mode */
+    mode: c_int, /* Operation mode */
 }
 
-#[derive(Copy, Clone)]
+impl fmt::Debug for WirelessConfig {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut better_essid = "[".to_string();
+        for &byte in self.essid.iter() {
+            better_essid.push_str(&format!("{:02X}, ", byte))
+        }
+        better_essid.push_str("]");
+        let mut better_key = "[".to_string();
+        for &byte in self.key.iter() {
+            better_key.push_str(&format!("{:02X}, ", byte))
+        }
+        better_key.push_str("]");
+
+        write!(f,
+               "WirelessConfig {{name: {:?},
+                has_nwid: {:?},
+                \
+                nwid: {:?},
+                has_freq: {:?},
+                freq: {:?},
+                \
+                freq_flags: {:?},
+                has_key: {:?},
+                key: {:?},
+                \
+                key_size: {:?},
+                key_flags: {:?},
+                has_essid: {:?},
+                \
+                essid_on: {:?},
+                essid: {:?},
+                essid_len: {:?},
+                has_mode: {:?},
+                \
+                mode: {:?},
+                }}",
+               self.name,
+               self.has_nwid,
+               self.nwid,
+               self.has_freq,
+               self.freq,
+               self.freq_flags,
+               self.has_key,
+               better_key,
+               self.key_size,
+               self.key_flags,
+               self.has_essid,
+               self.essid_on,
+               better_essid,
+               self.essid_len,
+               self.has_mode,
+               self.mode)
+    }
+}
+
 #[repr(C)]
 struct priv_iw_quality {
     qual: uint8_t,
@@ -148,12 +207,12 @@ impl Default for priv_iw_quality {
             qual: 0,
             level: 0,
             noise: 0,
-            updated: 0
+            updated: 0,
         }
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 #[repr(C)]
 struct priv_iw_freq {
     m: int32_t,
@@ -168,7 +227,7 @@ impl Default for priv_iw_freq {
             m: 0,
             e: 0,
             i: 0,
-            flags: 0
+            flags: 0,
         }
     }
 }
@@ -336,15 +395,14 @@ impl Default for iw_range {
 }
 
 #[link(name="iw")]
-extern {
+extern "C" {
     fn iw_sockets_open() -> c_int;
-    fn iw_get_range_info(socket: c_int,
-                         interface: *const c_char,
-                         range: &iw_range) -> c_int;
+    fn iw_get_range_info(socket: c_int, interface: *mut c_char, range: &iw_range) -> c_int;
     fn iw_scan(socket: c_int,
-               interface: *const c_char,
+               interface: *mut c_char,
                version: c_int,
-               head: *const WirelessScanHead) -> c_int;
+               head: *mut WirelessScanHead)
+               -> c_int;
 }
 
 /// The WifiScan struct is the base object for the dradis library.
@@ -375,53 +433,55 @@ impl<'a> WifiScan<'a> {
         // Scan things here
         let mut list = Vec::new();
         // First get an iw socket.
-        println!("dradis getting a socket...");
-        let sock = unsafe {iw_sockets_open()};
+        let sock = unsafe { iw_sockets_open() };
         let interface_name = CString::new(interface).unwrap();
         let range: iw_range = Default::default();
-        let head: *const WirelessScanHead;
-        println!("Starting dradis scan...");
-        unsafe { head = mem::uninitialized(); }
-        if unsafe {iw_get_range_info(sock, interface_name.as_ptr(), &range) < 0 } {
+        let head: *mut WirelessScanHead;
+        unsafe {
+            head = mem::uninitialized();
+        }
+        if unsafe { iw_get_range_info(sock, interface_name.as_ptr() as *mut c_char, &range) < 0 } {
             // We have to make this call in order to get the version of the library on the computer
-            return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
+            return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"));
         }
-        if unsafe {iw_scan(sock, interface_name.as_ptr(), range.we_version_compiled as c_int, head) <0 } {
+        if unsafe {
+            iw_scan(sock,
+                    interface_name.as_ptr() as *mut c_char,
+                    range.we_version_compiled as c_int,
+                    head) < 0
+        } {
             // This is the actual scan call that fills in the `head` struct with information about the visible networks.
-            return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"))
+            return Err(Error::new(ErrorKind::InvalidData, "Got an error from the iw library"));
         }
-        println!("dradis scan finished...");
-        let mut result = unsafe {(*head).result};
+
+        let mut result = unsafe { (*head).result };
         while !result.is_null() {
-            println!("Checking one network");
-            unsafe {println!("{:?}", (*result));}
             // The scan results are a linked list of structs with a bunch of information about each network
             // The type of encryption is encoded in a bitflag called `key_flags` which we check by doing
             // a bitwise and against the known bitflags.
             unsafe {
-                let answer = if (*result).b.key_flags & IW_AUTH_WPA_VERSION_DISABLED as c_int > 0 {
-                    "None".to_string()
-                } else if (*result).b.key_flags & IW_AUTH_WPA_VERSION_WPA as c_int > 0 {
-                    "WPA".to_string()
-                } else if (*result).b.key_flags & IW_AUTH_WPA_VERSION_WPA2 as c_int > 0 {
-                    "WPA2".to_string()
-                } else {
-                    "Error".to_string()
-                };
-                let network_name;
-                println!("Survived WPA shifts.");
-                if (*result).b.has_essid == 1 {
-                    let ssid_string: &CStr = match CStr::from_bytes_with_nul(
-                        ::std::slice::from_raw_parts(
-                            (*result).b.essid as *const u8, IW_ESSID_MAX_SIZE + 1 )) {
-                        Ok(good_string) => good_string,
-                        Err(err) => panic!("Could not parse essid string.")
+                let answer =
+                    if (*result).b.key_flags & IW_AUTH_WPA_VERSION_DISABLED as c_int > 0 {
+                        "None".to_string()
+                    } else if (*result).b.key_flags & IW_AUTH_WPA_VERSION_WPA as c_int > 0 {
+                        "WPA".to_string()
+                    } else if (*result).b.key_flags & IW_AUTH_WPA_VERSION_WPA2 as c_int > 0 {
+                        "WPA2".to_string()
+                    } else {
+                        "Error".to_string()
                     };
-
-                    println!("Parsed string.");
-                    // let buf: &[u8] = ssid_string.to_bytes();
-                    println!("{:?}", ssid_string);
-                    // let str_slice: &str = str::from_utf8(buf).unwrap();
+                let network_name;
+                if (*result).b.has_essid == 1 {
+                    let u8slice: [u8; 34] = mem::transmute((*result).b.essid);
+                    //let mut ssid_string = CStr::new("data");
+                    let ssid_string =
+                        match CStr::from_bytes_with_nul(u8slice.split_at(u8slice.into_iter()
+                                .position(|&byte| byte == 0x0)
+                                .unwrap() + 1)
+                            .0) { 
+                            Ok(good_string) => good_string,
+                            Err(err) => panic!("Could not parse essid string: {}", err),
+                        };
                     network_name = Some(ssid_string.to_string_lossy().into_owned());
                 } else {
                     network_name = None;
@@ -435,12 +495,12 @@ impl<'a> WifiScan<'a> {
                     mode: None,
                     essid: network_name,
                     encryption: answer,
-                    stats: Some((*result).stats)
+                    stats: Some((*result).stats.clone()),
                 });
                 result = (*result).next;
             }
         }
-        Ok( WifiScan { networks: list })
+        Ok(WifiScan { networks: list })
     }
 }
 
